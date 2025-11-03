@@ -838,145 +838,230 @@ TabMisc:Button({
 })
 
 
--- Freecam for PC & Mobile (WindUI compatible)
-local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local ContextActionService = game:GetService("ContextActionService")
-
-local player = Players.LocalPlayer
+-- ==============================
+-- Freecam (PC & Mobile) - Misc
+-- ==============================
 local cam = workspace.CurrentCamera
+local player = game.Players.LocalPlayer
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+local playerGui = player:WaitForChild("PlayerGui")
 
 local freecamEnabled = false
-local moveSpeed = 20
 local yaw, pitch = 0,0
-local camPos
-local rightMouseDown = false
+local mouseSensitivity = 0.002
+local rotSpeed = math.rad(90)
+local moveSpeed = 20
 local keysDown = {W=false, A=false, S=false, D=false, Q=false, E=false}
 local rotFlags = {Left=false, Right=false, Up=false, Down=false}
-local renderConn, savedCamData
 
--- Save/restore camera
+local savedCamData
+local camPos
+local renderConn
+
+-- Helper functions
 local function saveCamera()
     return {CameraType = cam.CameraType, CameraSubject = cam.CameraSubject, CFrame = cam.CFrame}
 end
+
 local function restoreCamera(data)
     cam.CameraType = data.CameraType or Enum.CameraType.Custom
     cam.CameraSubject = data.CameraSubject or player.Character
     if data.CFrame then cam.CFrame = data.CFrame end
 end
 
--- Freeze humanoid
 local function freezeHumanoid()
     local char = player.Character
-    if not char then return end
-    local h = char:FindFirstChildOfClass("Humanoid")
-    if h then h.WalkSpeed = 0; h.JumpPower = 0 end
-end
-local function unfreezeHumanoid()
-    local char = player.Character
-    if not char then return end
-    local h = char:FindFirstChildOfClass("Humanoid")
-    if h then h.WalkSpeed = 16; h.JumpPower = 50 end
+    if char then
+        local h = char:FindFirstChildOfClass("Humanoid")
+        if h then
+            h.WalkSpeed = 0
+            h.JumpPower = 0
+        end
+    end
 end
 
--- Movement vector
+local function unfreezeHumanoid()
+    local char = player.Character
+    if char then
+        local h = char:FindFirstChildOfClass("Humanoid")
+        if h then
+            h.WalkSpeed = 16
+            h.JumpPower = 50
+        end
+    end
+end
+
+local function seedOrientation(cf)
+    local pos = cf.Position
+    local look = cf.LookVector
+    yaw = math.atan2(-look.X, -look.Z)
+    pitch = math.clamp(math.asin(look.Y), math.rad(-85), math.rad(85))
+    return pos
+end
+
 local function keyboardMoveVector()
     local x = (keysDown.D and 1 or 0) - (keysDown.A and 1 or 0)
     local z = (keysDown.S and 1 or 0) - (keysDown.W and 1 or 0)
     local y = (keysDown.E and 1 or 0) - (keysDown.Q and 1 or 0)
     local v = Vector3.new(x,y,z)
-    if v.Magnitude > 1 then v = v.Unit end
+    if v.Magnitude>1 then v = v.Unit end
     return v
 end
 
--- Rotate cam from yaw/pitch
-local function updateCamera(dt)
-    local rot = CFrame.Angles(0, yaw, 0) * CFrame.Angles(pitch, 0, 0)
-    local mv = keyboardMoveVector()
-    local delta = (rot.RightVector * mv.X + Vector3.yAxis * mv.Y + rot.LookVector * -mv.Z) * moveSpeed * dt
-    camPos += delta
-    cam.CFrame = CFrame.new(camPos) * rot
-end
-
--- Start/Stop freecam
 local function startFreecam()
     savedCamData = saveCamera()
     freezeHumanoid()
     cam.CameraType = Enum.CameraType.Scriptable
-    camPos = cam.CFrame.Position
-    yaw = math.atan2(-cam.CFrame.LookVector.X, -cam.CFrame.LookVector.Z)
-    pitch = math.clamp(math.asin(cam.CFrame.LookVector.Y), math.rad(-85), math.rad(85))
+    camPos = seedOrientation(cam.CFrame)
+
+    if not UserInputService.TouchEnabled then
+        UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
+    else
+        -- mobile arrows
+        local gui = Instance.new("ScreenGui")
+        gui.Name = "FreecamMobileControls"
+        gui.ResetOnSpawn = false
+        gui.Parent = playerGui
+
+        local function createButton(name,pos)
+            local btn = Instance.new("TextButton")
+            btn.Name = name
+            btn.Size = UDim2.fromOffset(60,60)
+            btn.Position = pos
+            btn.BackgroundTransparency = 0.5
+            btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
+            btn.Text = name
+            btn.TextColor3 = Color3.new(1,1,1)
+            btn.TextScaled = true
+            btn.AutoButtonColor = false
+            btn.ZIndex = 10
+            btn.Parent = gui
+            return btn
+        end
+
+        local buttonW = createButton("W", UDim2.new(0.9, -30, 0.7, -100))
+        local buttonA = createButton("A", UDim2.new(0.85, -30, 0.75, -30))
+        local buttonS = createButton("S", UDim2.new(0.9, -30, 0.75, -30))
+        local buttonD = createButton("D", UDim2.new(0.95, -30, 0.75, -30))
+        local buttonQ = createButton("Q", UDim2.new(0.85, -30, 0.8, -30))
+        local buttonE = createButton("E", UDim2.new(0.95, -30, 0.8, -30))
+        local buttons = {W=buttonW, A=buttonA, S=buttonS, D=buttonD, Q=buttonQ, E=buttonE}
+
+        for key, btn in pairs(buttons) do
+            btn.InputBegan:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    keysDown[key] = true
+                end
+            end)
+            btn.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.Touch then
+                    keysDown[key] = false
+                end
+            end)
+        end
+    end
+
     freecamEnabled = true
-    renderConn = RunService.RenderStepped:Connect(updateCamera)
+
+    renderConn = RunService.RenderStepped:Connect(function(dt)
+        if rotFlags.Left then yaw += rotSpeed*dt end
+        if rotFlags.Right then yaw -= rotSpeed*dt end
+        if rotFlags.Up then pitch = math.clamp(pitch + rotSpeed*dt, math.rad(-85), math.rad(85)) end
+        if rotFlags.Down then pitch = math.clamp(pitch - rotSpeed*dt, math.rad(-85), math.rad(85)) end
+
+        local rot = CFrame.Angles(0,yaw,0)*CFrame.Angles(pitch,0,0)
+        local mv = keyboardMoveVector()
+        local delta = (rot.RightVector*mv.X + Vector3.yAxis*mv.Y + rot.LookVector*-mv.Z)*moveSpeed*dt
+        camPos += delta
+        cam.CFrame = CFrame.new(camPos)*rot
+    end)
 end
+
 local function stopFreecam()
     freecamEnabled = false
-    if renderConn then renderConn:Disconnect(); renderConn = nil end
+    if renderConn then renderConn:Disconnect() renderConn=nil end
     restoreCamera(savedCamData)
+    if not UserInputService.TouchEnabled then
+        UserInputService.MouseBehavior = Enum.MouseBehavior.Default
+    end
     unfreezeHumanoid()
-    keysDown = {W=false, A=false, S=false, D=false, Q=false, E=false}
-    rotFlags = {Left=false, Right=false, Up=false, Down=false}
+    keysDown = {W=false,A=false,S=false,D=false,Q=false,E=false}
+    rotFlags = {Left=false,Right=false,Up=false,Down=false}
+    -- remove mobile GUI
+    local oldGui = playerGui:FindFirstChild("FreecamMobileControls")
+    if oldGui then oldGui:Destroy() end
 end
 
--- Input handling
-UserInputService.InputBegan:Connect(function(input, gp)
-    if gp or not freecamEnabled then return end
-    if input.UserInputType == Enum.UserInputType.Keyboard then
-        local kc = input.KeyCode
-        if keysDown[kc.Name] ~= nil then keysDown[kc.Name] = true end
-    elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-        rightMouseDown = true
-    end
-end)
-UserInputService.InputEnded:Connect(function(input, gp)
-    if gp or not freecamEnabled then return end
-    if input.UserInputType == Enum.UserInputType.Keyboard then
-        local kc = input.KeyCode
-        if keysDown[kc.Name] ~= nil then keysDown[kc.Name] = false end
-    elseif input.UserInputType == Enum.UserInputType.MouseButton2 then
-        rightMouseDown = false
-    end
-end)
-UserInputService.InputChanged:Connect(function(input, gp)
-    if gp or not freecamEnabled then return end
-    if input.UserInputType == Enum.UserInputType.MouseMovement and rightMouseDown then
-        yaw   -= input.Delta.X * 0.002
-        pitch -= input.Delta.Y * 0.002
-        pitch = math.clamp(pitch, math.rad(-85), math.rad(85))
-    elseif input.UserInputType == Enum.UserInputType.Touch then
-        yaw   -= input.Delta.X * 0.005
-        pitch -= input.Delta.Y * 0.005
-        pitch = math.clamp(pitch, math.rad(-85), math.rad(85))
+-- Mouse / Touch rotation
+UserInputService.InputChanged:Connect(function(input,gp)
+    if not freecamEnabled then return end
+    if input.UserInputType == Enum.UserInputType.MouseMovement and not UserInputService.TouchEnabled then
+        yaw -= input.Delta.X*mouseSensitivity
+        pitch -= input.Delta.Y*mouseSensitivity
+        pitch = math.clamp(pitch,math.rad(-85),math.rad(85))
+    elseif UserInputService.TouchEnabled and input.UserInputType == Enum.UserInputType.Touch then
+        local vp = cam.ViewportSize
+        if input.Position.X >= vp.X*0.66 then
+            yaw -= input.Delta.X*mouseSensitivity
+            pitch -= input.Delta.Y*mouseSensitivity
+            pitch = math.clamp(pitch,math.rad(-85),math.rad(85))
+        end
     end
 end)
 
--- WindUI toggle & speed
-local TabMisc = TabMisc or Window:Tab({
-    Title = "Misc",
-    Icon = "activity",
-    Locked = false
-})
+-- Keyboard
+UserInputService.InputBegan:Connect(function(input,gp)
+    if gp or not freecamEnabled then return end
+    if input.UserInputType==Enum.UserInputType.Keyboard then
+        local kc = input.KeyCode
+        if kc==Enum.KeyCode.W then keysDown.W=true end
+        if kc==Enum.KeyCode.A then keysDown.A=true end
+        if kc==Enum.KeyCode.S then keysDown.S=true end
+        if kc==Enum.KeyCode.D then keysDown.D=true end
+        if kc==Enum.KeyCode.Q then keysDown.Q=true end
+        if kc==Enum.KeyCode.E then keysDown.E=true end
+    end
+end)
 
+UserInputService.InputEnded:Connect(function(input,gp)
+    if gp or not freecamEnabled then return end
+    if input.UserInputType==Enum.UserInputType.Keyboard then
+        local kc = input.KeyCode
+        if kc==Enum.KeyCode.W then keysDown.W=false end
+        if kc==Enum.KeyCode.A then keysDown.A=false end
+        if kc==Enum.KeyCode.S then keysDown.S=false end
+        if kc==Enum.KeyCode.D then keysDown.D=false end
+        if kc==Enum.KeyCode.Q then keysDown.Q=false end
+        if kc==Enum.KeyCode.E then keysDown.E=false end
+    end
+end)
+
+-- WindUI Misc toggle
 TabMisc:Toggle({
     Title = "Freecam",
-    Desc = "Toggle Freecam (PC & Mobile compatible)",
+    Desc = "Toggle Freecam (PC & Mobile)",
     Value = false,
-    Callback = function(state)
-        if state then startFreecam() else stopFreecam() end
+    Callback = function(val)
+        if val then
+            startFreecam()
+        else
+            stopFreecam()
+        end
     end
 })
 
+-- WindUI speed controls
 TabMisc:Input({
     Title = "Freecam Speed",
-    Desc = "Set camera movement speed",
+    Desc = "Set Freecam movement speed",
     Value = tostring(moveSpeed),
-    InputIcon = "cpu",
     Type = "Input",
-    Placeholder = "20",
     Callback = function(val)
-        local num = tonumber(val)
-        if num and num > 0 then moveSpeed = num end
+        local n = tonumber(val)
+        if n and n>0 then
+            moveSpeed = n
+        end
     end
 })
 
