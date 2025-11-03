@@ -910,34 +910,42 @@ local function startFreecam()
     if not UserInputService.TouchEnabled then
         UserInputService.MouseBehavior = Enum.MouseBehavior.LockCurrentPosition
     else
-        -- mobile arrows
+        -- Mobile arrows (kiri layar + jarak lebar)
         local gui = Instance.new("ScreenGui")
         gui.Name = "FreecamMobileControls"
         gui.ResetOnSpawn = false
         gui.Parent = playerGui
 
-        local function createButton(name,pos)
+        local function createButton(symbol, pos)
             local btn = Instance.new("TextButton")
-            btn.Name = name
-            btn.Size = UDim2.fromOffset(60,60)
+            btn.Size = UDim2.fromOffset(80, 80)
             btn.Position = pos
-            btn.BackgroundTransparency = 0.5
-            btn.BackgroundColor3 = Color3.fromRGB(50,50,50)
-            btn.Text = name
+            btn.BackgroundTransparency = 0.3
+            btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            btn.Text = symbol
             btn.TextColor3 = Color3.new(1,1,1)
+            btn.Font = Enum.Font.GothamBold
             btn.TextScaled = true
             btn.AutoButtonColor = false
             btn.ZIndex = 10
+            local corner = Instance.new("UICorner", btn)
+            corner.CornerRadius = UDim.new(0, 12)
             btn.Parent = gui
             return btn
         end
 
-        local buttonW = createButton("W", UDim2.new(0.9, -30, 0.7, -100))
-        local buttonA = createButton("A", UDim2.new(0.85, -30, 0.75, -30))
-        local buttonS = createButton("S", UDim2.new(0.9, -30, 0.75, -30))
-        local buttonD = createButton("D", UDim2.new(0.95, -30, 0.75, -30))
-        local buttonQ = createButton("Q", UDim2.new(0.85, -30, 0.8, -30))
-        local buttonE = createButton("E", UDim2.new(0.95, -30, 0.8, -30))
+        -- Tata letak kiri bawah, agak renggang
+        local baseX = 0.05
+        local baseY = 0.65
+        local gap = 0.12
+
+        local buttonW = createButton("↑", UDim2.new(baseX + gap, 0, baseY - gap, 0))
+        local buttonA = createButton("←", UDim2.new(baseX, 0, baseY, 0))
+        local buttonS = createButton("↓", UDim2.new(baseX + gap, 0, baseY, 0))
+        local buttonD = createButton("→", UDim2.new(baseX + gap*2, 0, baseY, 0))
+        local buttonQ = createButton("⇧", UDim2.new(baseX, 0, baseY + gap, 0))
+        local buttonE = createButton("⇩", UDim2.new(baseX + gap*2, 0, baseY + gap, 0))
+
         local buttons = {W=buttonW, A=buttonA, S=buttonS, D=buttonD, Q=buttonQ, E=buttonE}
 
         for key, btn in pairs(buttons) do
